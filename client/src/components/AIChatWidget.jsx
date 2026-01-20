@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { sendMessage } from "../api/aiApi";
+import { addPlace } from "../api/placeService";
+import { getTrips } from "../api/tripsService";
 
-export default function AIChatWidget() {
+export default function AIChatWidget({ tripId, user, setActiveTrip }) {
   const [messages, setMessages] = useState([
     {
       role: "ai",
@@ -11,33 +14,77 @@ export default function AIChatWidget() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || thinking) return;
 
-    setMessages((prev) => [...prev, { role: "user", text: input }]);
+    const userMessage = input;
+
+    // Show user message instantly
+    setMessages((prev) => [...prev, { role: "user", text: userMessage }]);
     setInput("");
     setThinking(true);
 
-    // UI-only simulated response
-    setTimeout(() => {
+    try {
+      // 🔹 Ask Gemini backend
+      const res = await sendMessage(userMessage, tripId);
+
+      // ✅ ADD PLACE FLOW
+      if (res.action === "ADD_PLACE" && res.payload) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "ai", text: res.reply },
+          { role: "ai", text: "📍 Adding place to your trip..." },
+        ]);
+
+        // TEMP coordinates (Geoapify comes next phase)
+        await addPlace(tripId, {
+          name: res.payload.query,
+          lat: 11.9341,
+          lng: 79.8300,
+          cost: res.payload.type === "food" ? 400 : 0,
+        });
+
+        // 🔄 Refresh trips from DB
+        const trips = await getTrips(user.uid);
+        setActiveTrip(trips[0]);
+
+        setMessages((prev) => [
+          ...prev,
+          { role: "ai", text: "✅ Place added successfully!" },
+        ]);
+      }
+
+      // ✅ NORMAL CHAT (NO ACTION)
+      else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            text: res.reply || "😊 I'm here to help!",
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error("AI error:", err);
       setMessages((prev) => [
         ...prev,
         {
           role: "ai",
-          text: "Noted 👍 I’ll keep this in mind for your itinerary.",
+          text: "⚠️ Sorry, something went wrong. Try again.",
         },
       ]);
+    } finally {
       setThinking(false);
-    }, 1200);
+    }
   };
 
   return (
-    <section className="mt-6 rounded-2xl bg-slate-900/50 backdrop-blur-md border border-white/10 shadow-lg flex flex-col h-[280px]">
+    <section className="mt-4 rounded-2xl bg-slate-900/50 backdrop-blur-md border border-white/10 shadow-lg flex flex-col h-[280px]">
 
       {/* Header */}
       <div className="px-4 py-2 text-sm font-semibold text-white border-b border-white/10">
         🤖 AI Travel Assistant
-        <span className="ml-2 text-xs text-white/50">(Glass UI)</span>
+        <span className="ml-2 text-xs text-white/50">(Gemini)</span>
       </div>
 
       {/* Messages */}
@@ -67,13 +114,15 @@ export default function AIChatWidget() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about today’s plan..."
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          placeholder="Add places, hotels, food..."
           className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none placeholder-white/40"
         />
 
         <button
-          onClick={sendMessage}
-          className="px-4 rounded-xl bg-sky-500/80 hover:bg-sky-500 text-white text-sm transition"
+          onClick={handleSend}
+          disabled={thinking}
+          className="px-4 rounded-xl bg-sky-500/80 hover:bg-sky-500 disabled:opacity-50 text-white text-sm transition"
         >
           Send
         </button>

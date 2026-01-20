@@ -6,7 +6,9 @@ export default function EmergencyButton() {
   return (
     <>
       {/* SOS BUTTON */}
-      <div className="fixed bottom-5 left-5 z-[99999]">
+    <div className="fixed bottom-6 left-6 z-[1000]">
+
+
         {/* Ripple */}
         <span className="absolute inset-0 rounded-full bg-red-500/40 animate-ping" />
 
